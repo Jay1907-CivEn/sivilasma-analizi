@@ -1,81 +1,80 @@
 import streamlit as st
 import pandas as pd
 
-# Sayfa Tasarımı (Sade ve Minimalist)
-st.set_page_config(page_title="SPT Inferences", layout="centered")
+# Page Configuration
+st.set_page_config(page_title="SPT Soil Analysis", layout="centered")
 
 def get_spt_insight(n):
-    """Sadece SPT-N değerine bakarak mühendislik çıkarımları"""
+    """Engineering inferences based on SPT-N values"""
     if n < 4:
-        return "Çok Gevşek (Very Loose)", "Kritik Derecede Sıvılaşabilir", "#8B0000" # Koyu Kırmızı
+        return "Very Loose", "Critically Liquefiable", "#8B0000"
     elif n < 10:
-        return "Gevşek (Loose)", "Yüksek Sıvılaşma Potansiyeli", "#FF4B4B" # Kırmızı
+        return "Loose", "High Liquefaction Potential", "#FF4B4B"
     elif n < 30:
-        return "Orta Sıkı (Medium Dense)", "Sınırlı/Olası Sıvılaşma", "#FFA500" # Turuncu
+        return "Medium Dense", "Marginal/Possible Liquefaction", "#FFA500"
     elif n < 50:
-        return "Sıkı (Dense)", "Düşük Sıvılaşma Riski", "#2E8B57" # Yeşil
+        return "Dense", "Low Liquefaction Risk", "#2E8B57"
     else:
-        return "Çok Sıkı (Very Dense)", "Sıvılaşma Beklenmez", "#006400" # Koyu Yeşil
+        return "Very Dense", "Liquefaction Unlikely", "#006400"
 
+# Header Section
 st.title("Borehole Insight: SPT-Based Analysis")
-st.write("Teknik karmaşa yok. Sadece SPT-N verilerine dayalı zemin davranış çıkarımları.")
+st.write("Minimalist engineering inferences based on raw SPT values. No technical clutter, just data-driven results.")
 
-# Dosya Yükleme
-uploaded_file = st.file_uploader("Sadece Veri Dosyasını Yükle (CSV/Excel)", type=['csv', 'xlsx'])
+# File Upload
+uploaded_file = st.file_uploader("Upload Data File (CSV/Excel)", type=['csv', 'xlsx'])
 
 if uploaded_file is not None:
     try:
-        # Veri Okuma ve Sütun Düzenleme
+        # Data Reading & Column Normalization
         df = pd.read_csv(uploaded_file, sep=None, engine='python') if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-        column_map = {'depth': 'Derinlik', 'derinlik': 'Derinlik', 'z': 'Derinlik', 'n': 'SPT_N', 'spt': 'SPT_N', 'spt_n': 'SPT_N'}
+        column_map = {'depth': 'Depth', 'derinlik': 'Depth', 'z': 'Depth', 'n': 'SPT_N', 'spt': 'SPT_N', 'spt_n': 'SPT_N'}
         df.columns = [column_map.get(col.lower().strip(), col) for col in df.columns]
 
-        if 'Derinlik' in df.columns and 'SPT_N' in df.columns:
+        if 'Depth' in df.columns and 'SPT_N' in df.columns:
             
-            # --- GLOBAL RİSK SKALASI (Summary Card) ---
+            # --- OVERALL RISK SUMMARY ---
             avg_n = df['SPT_N'].mean()
             worst_n = df['SPT_N'].min()
-            insight, risk_desc, color = get_spt_insight(worst_n) # En kötü noktaya odaklanıyoruz
+            insight, risk_desc, color = get_spt_insight(worst_n)
             
             st.markdown(f"""
                 <div style="background-color:{color}; padding:30px; border-radius:15px; text-align:center; color:white; margin-bottom:20px">
-                    <h1 style="margin:0">GENEL RİSK: {risk_desc.upper()}</h1>
-                    <p style="font-size:20px; margin:10px 0">En Düşük SPT-N: {worst_n} | Ortalama SPT-N: {avg_n:.2f}</p>
+                    <h1 style="margin:0">OVERALL RISK: {risk_desc.upper()}</h1>
+                    <p style="font-size:18px; margin:10px 0">Lowest SPT-N: {worst_n} | Average SPT-N: {avg_n:.2f}</p>
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- MÜHENDİSLİK ÇIKARIMLARI (Bullet Points) ---
-            st.subheader("📊 Zemin Davranış Çıkarımları")
-            
-            # Dinamik çıkarımlar yapalım
-            with st.expander("Detaylı Mühendislik Notları", expanded=True):
+            # --- ENGINEERING NOTES ---
+            st.subheader("Engineering Inferences")
+            with st.expander("Detailed Analysis Notes", expanded=True):
                 if worst_n < 10:
-                    st.error(f"⚠️ **Kritik Gözlem:** Derinlik boyunca {worst_n} gibi çok düşük SPT değerleri tespit edilmiştir. Bu, zeminin sismik sarsıntı altında hacim daralmasına (contractive behavior) meyilli olduğunu gösterir.")
-                    st.write("- **Taşıma Gücü:** Temel altı zeminlerde ani oturma riski mevcut.")
-                    st.write("- **Sıvılaşma:** Su varlığı durumunda zemin mukavemetini tamamen kaybedebilir.")
+                    st.write("**Observations:** Critically low SPT values detected. The soil profile is susceptible to contractive behavior under seismic loading.")
+                    st.write("- **Bearing Capacity:** High risk of differential settlement.")
+                    st.write("- **Stability:** Ground improvement is strongly recommended.")
                 elif worst_n < 30:
-                    st.warning(f"🔔 **Gözlem:** Zemin orta sıkı karakterdedir. Deprem yükü şiddetine bağlı olarak sıvılaşma tetiklenebilir.")
-                    st.write("- **Öneri:** Zemin ıslahı (kompaksiyon vb.) değerlendirilebilir.")
+                    st.write("**Observations:** Medium dense soil profile. Liquefaction may be triggered depending on peak ground acceleration.")
+                    st.write("- **Action:** Detailed laboratory testing is advised.")
                 else:
-                    st.success("✅ **Gözlem:** Zemin profili oldukça sıkı ve güvenli bir yapı sunmaktadır.")
+                    st.write("**Observations:** Competent soil profile with high stiffness.")
 
-            # --- DERİNLİĞE GÖRE SKALA (Table-Like View) ---
-            st.subheader("Depth-Based Vulnerability")
+            # --- DEPTH-BASED LIST ---
+            st.subheader("Depth-Based Characterization")
             for _, row in df.iterrows():
                 char, risk, row_color = get_spt_insight(row['SPT_N'])
                 st.markdown(f"""
                     <div style="display: flex; justify-content: space-between; align-items: center; 
-                                border-left: 10px solid {row_color}; background: #1e1e1e; padding: 10px; margin: 5px 0; border-radius: 5px">
-                        <span style="font-weight: bold; color: #ddd">{row['Derinlik']} m</span>
-                        <span style="color: {row_color}">SPT-N: {row['SPT_N']}</span>
+                                border-left: 10px solid {row_color}; background: #1e1e1e; padding: 12px; margin: 8px 0; border-radius: 8px">
+                        <span style="font-weight: bold; color: #ddd">{row['Depth']} m</span>
+                        <span style="color: {row_color}; font-weight: bold">N: {row['SPT_N']}</span>
                         <span style="font-style: italic; color: #bbb">{char}</span>
                         <span style="font-weight: bold; color: {row_color}">{risk}</span>
                     </div>
                 """, unsafe_allow_html=True)
         else:
-            st.error("Dosyada 'Derinlik' ve 'SPT_N' sütunlarını bulamadım.")
+            st.error("Column mismatch! Please ensure your file contains 'Depth' and 'SPT_N'.")
 
     except Exception as e:
-        st.error(f"Bir hata oluştu: {e}")
+        st.error(f"An unexpected error occurred: {e}")
 else:
-    st.info("Analiz için bir veri dosyası yükle. Sadece SPT sayılarına bakarak ne olduğunu söyleyeceğim.")
+    st.info("Awaiting data upload for automated soil characterization.")
