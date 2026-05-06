@@ -3,14 +3,22 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Page Setup
-st.set_page_config(page_title="Auto-Stress Liquefaction Tool", layout="centered")
+# Sayfa Ayarları
+st.set_page_config(page_title="Smart Liquefaction Tool", layout="centered")
 
-# Sabit Mühendislik Değerleri
-GAMMA_SOIL = 19.0  # kN/m3 (Zemin ortalama birim hacim ağırlığı)
-GAMMA_WATER = 9.81 # kN/m3 (Suyun birim hacim ağırlığı)
-MW_DEFAULT = 7.5   # Design Earthquake Magnitude
-AMAX_DEFAULT = 0.30 # Design Acceleration
+# Sabit Değerler
+GAMMA_SOIL = 19.0 
+GAMMA_WATER = 9.81
+MW = 7.5
+AMAX = 0.30
+
+def get_soil_description(n):
+    """SPT-N değerine göre temel zemin tanımlaması"""
+    if n < 4: return "Very Loose Sand", "#B22222" # Koyu Kırmızı
+    elif n < 10: return "Loose Sand", "#FF4500"   # Turuncu-Kırmızı
+    elif n < 30: return "Medium Dense Sand", "#FFD700" # Altın/Sarı
+    elif n < 50: return "Dense Sand", "#9ACD32"    # Sarı-Yeşil
+    else: return "Very Dense Sand", "#228B22"      # Koyu Yeşil
 
 def calculate_lpi(df):
     lpi_total = 0
@@ -24,77 +32,60 @@ def calculate_lpi(df):
         lpi_total += F * w_z * dz
     return lpi_total
 
-def get_risk_grade(lpi):
-    if lpi == 0: return "None", "#28A745"
-    elif lpi <= 5: return "Low Risk", "#8CC63F"
-    elif lpi <= 15: return "Moderate Risk", "#FFC107"
-    else: return "High Risk", "#DC3545"
+st.title("Automated Soil & Risk Analysis")
+st.write("Automatic stress calculation and soil type estimation based on SPT values.")
 
-# --- UI ---
-st.title("Automated Liquefaction Risk Assessment")
-st.write("Enter the groundwater level and upload your SPT-N values. Stresses are calculated automatically.")
-
-# Kullanıcıdan sadece Su Seviyesi girdisi alıyoruz
-gwt = st.slider("Groundwater Table Depth (m)", 0.0, 10.0, 2.0)
-
-uploaded_file = st.file_uploader("Upload CSV/Excel (Needs 'Derinlik' and 'SPT_N' columns)", type=['csv', 'xlsx'])
+gwt = st.slider("Groundwater Table Depth (m)", 0.0, 15.0, 2.0)
+uploaded_file = st.file_uploader("Upload Data", type=['csv', 'xlsx'])
 
 if uploaded_file is not None:
     try:
         df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
         
-        # 1. OTOMATİK GERİLME HESAPLARI (Mühendislik Mutfağı)
-        # Toplam Gerilme: sigma_v = derinlik * gamma_zemin
-        df['Toplam_Gerilme'] = df['Derinlik'] * GAMMA_SOIL
-        
-        # Boşluk Suyu Basıncı (u): Eğer derinlik > su seviyesi ise hesapla
-        df['u'] = df['Derinlik'].apply(lambda z: (z - gwt) * GAMMA_WATER if z > gwt else 0)
-        
-        # Etkili Gerilme: sigma_v' = sigma_v - u
-        df['Etkili_Gerilme'] = df['Toplam_Gerilme'] - df['u']
+        # Sütun İsimlerini Normalize Etme (Hata Çözücü)
+        column_map = {
+            'depth': 'Derinlik', 'derinlik': 'Derinlik', 'z': 'Derinlik',
+            'n': 'SPT_N', 'spt': 'SPT_N', 'spt_n': 'SPT_N', 'spt n': 'SPT_N'
+        }
+        df.columns = [column_map.get(col.lower().strip(), col) for col in df.columns]
 
-        # 2. SIVILAŞMA ANALİZİ (Idriss & Boulanger 2014)
+        # Otomatik Hesaplamalar
+        df['Toplam_Gerilme'] = df['Derinlik'] * GAMMA_SOIL
+        df['u'] = df['Derinlik'].apply(lambda z: (z - gwt) * GAMMA_WATER if z > gwt else 0)
+        df['Etkili_Gerilme'] = df['Toplam_Gerilme'] - df['u']
+        
+        # Sıvılaşma Analizi
         df['rd'] = df['Derinlik'].apply(lambda z: 1.0 - 0.00765 * z if z <= 9.15 else 1.174 - 0.0267 * z)
-        df['CSR'] = 0.65 * AMAX_DEFAULT * (df['Toplam_Gerilme'] / df['Etkili_Gerilme']) * df['rd']
+        df['CSR'] = 0.65 * AMAX * (df['Toplam_Gerilme'] / df['Etkili_Gerilme']) * df['rd']
         df['Cn'] = np.sqrt(100 / df['Etkili_Gerilme']).clip(upper=1.7)
         df['N1_60'] = df['SPT_N'] * df['Cn']
-        df['CRR_base'] = np.exp((df['N1_60'] / 14.1) + (df['N1_60'] / 126)**2 - (df['N1_60'] / 23.6)**3 + (df['N1_60'] / 25.4)**4 - 2.8)
-        msf = 6.9 * np.exp(-MW_DEFAULT / 4) - 0.058
-        df['FS'] = df['CRR_base'] * msf
+        df['CRR'] = np.exp((df['N1_60'] / 14.1) + (df['N1_60'] / 126)**2 - (df['N1_60'] / 23.6)**3 + (df['N1_60'] / 25.4)**4 - 2.8) * (6.9 * np.exp(-MW / 4) - 0.058)
+        df['FS'] = df['CRR'] / df['CSR']
         
-        # 3. SONUÇLAR VE GÖRSELLEŞTİRME
-        lpi_score = calculate_lpi(df)
-        risk_text, risk_color = get_risk_grade(lpi_score)
+        # Zemin Tahmini
+        df['Soil_Type'] = df['SPT_N'].apply(lambda x: get_soil_description(x)[0])
 
-        st.markdown(f"""
-            <div style="background-color:{risk_color}; padding:25px; border-radius:15px; text-align:center; color:white; font-family:sans-serif">
-                <h2 style="margin:0">OVERALL ANALYSIS: {risk_text}</h2>
-                <p style="font-size:28px; margin:10px 0">LPI Score: {lpi_score:.2f}</p>
-                <p style="font-size:16px; margin:0; opacity:0.8">Automatic Stress Calculation Enabled (GWT: {gwt}m)</p>
-            </div>
-        """, unsafe_allow_html=True)
+        # Skorlar
+        lpi_score = calculate_lpi(df)
+        st.metric("Liquefaction Potential Index (LPI)", f"{lpi_score:.2f}")
+
+        # Görsel: Zemin Profili Özeti
+        st.write("### Automated Soil Description")
+        cols = st.columns(len(df))
+        for i, row in df.iterrows():
+            desc, color = get_soil_description(row['SPT_N'])
+            st.markdown(f"<div style='background-color:{color}; color:white; padding:5px; margin:2px; border-radius:5px; font-size:10px; text-align:center;'>{row['Derinlik']}m<br>{desc}</div>", unsafe_allow_html=True)
 
         # Grafik
-        st.write("### Soil Factor of Safety Profile")
+        st.write("### Risk Profile")
         fig, ax = plt.subplots(figsize=(6, 8))
-        ax.plot(df['FS'], df['Derinlik'], marker='o', color='#1f77b4', linewidth=2, label='FS (Safety Factor)')
-        
-        # Risk Arka Planı
-        ax.axvspan(0, 1.0, color='#DC3545', alpha=0.15, label='High Risk Zone')
-        ax.axvspan(1.0, 1.2, color='#FFC107', alpha=0.1, label='Marginal Zone')
-        
-        # Su Seviyesi Göstergesi (Grafikte mavi kesikli çizgi)
-        ax.axhline(y=gwt, color='blue', linestyle='--', alpha=0.5, label=f'Water Table ({gwt}m)')
-        
+        ax.plot(df['FS'], df['Derinlik'], marker='o', label='FS Profile')
+        ax.axhline(y=gwt, color='blue', linestyle='--', label='Water Table')
+        ax.axvspan(0, 1.0, color='red', alpha=0.1, label='Unstable')
         ax.set_ylim(max(df['Derinlik']) + 1, 0)
         ax.set_xlim(0, 3)
-        ax.set_xlabel("Factor of Safety (FS)")
-        ax.set_ylabel("Depth (m)")
-        ax.legend(loc='lower right')
-        ax.grid(True, alpha=0.2)
+        ax.legend()
         st.pyplot(fig)
 
     except Exception as e:
-        st.error("Missing Data: Please ensure your file has 'Derinlik' and 'SPT_N' columns.")
-else:
-    st.info("Awaiting data file for automatic stress and risk analysis.")
+        st.error(f"Error processing file: {e}")
