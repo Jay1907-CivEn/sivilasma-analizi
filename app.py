@@ -2,24 +2,23 @@ import streamlit as st
 import pandas as pd
 
 # Page Configuration
-st.set_page_config(page_title="SPT Soil Analysis", layout="centered")
+st.set_page_config(page_title="Liquefaction Risk", layout="centered")
 
 def get_spt_insight(n):
-    """Engineering inferences based on SPT-N values"""
+    """Engineering inferences based on SPT-N values with color scale"""
     if n < 4:
-        return "Very Loose", "Critically Liquefiable", "#8B0000"
+        return "Very Loose", "Critically Liquefiable", "#8B0000" # Dark Red
     elif n < 10:
-        return "Loose", "High Liquefaction Potential", "#FF4B4B"
+        return "Loose", "High Risk", "#FF4B4B" # Red
     elif n < 30:
-        return "Medium Dense", "Marginal/Possible Liquefaction", "#FFA500"
+        return "Medium Dense", "Moderate Risk", "#FFA500" # Orange/Yellow
     elif n < 50:
-        return "Dense", "Low Liquefaction Risk", "#2E8B57"
+        return "Dense", "Low Risk", "#2E8B57" # Green
     else:
-        return "Very Dense", "Liquefaction Unlikely", "#006400"
+        return "Very Dense", "Negligible Risk", "#006400" # Dark Green
 
-# Header Section
-st.title("Borehole Insight: SPT-Based Analysis")
-st.write("Minimalist engineering inferences based on raw SPT values. No technical clutter, just data-driven results.")
+# Header Section - Short and Professional
+st.title("Liquefaction Risk")
 
 # File Upload
 uploaded_file = st.file_uploader("Upload Data File (CSV/Excel)", type=['csv', 'xlsx'])
@@ -34,6 +33,7 @@ if uploaded_file is not None:
         if 'Depth' in df.columns and 'SPT_N' in df.columns:
             
             # --- OVERALL RISK SUMMARY ---
+            # It takes the minimum SPT-N to define the most critical risk level color
             avg_n = df['SPT_N'].mean()
             worst_n = df['SPT_N'].min()
             insight, risk_desc, color = get_spt_insight(worst_n)
@@ -49,14 +49,14 @@ if uploaded_file is not None:
             st.subheader("Engineering Inferences")
             with st.expander("Detailed Analysis Notes", expanded=True):
                 if worst_n < 10:
-                    st.write("**Observations:** Critically low SPT values detected. The soil profile is susceptible to contractive behavior under seismic loading.")
-                    st.write("- **Bearing Capacity:** High risk of differential settlement.")
-                    st.write("- **Stability:** Ground improvement is strongly recommended.")
+                    st.write("**Observations:** Critically low SPT values detected. High susceptibility to liquefaction.")
+                    st.write("- **Bearing Capacity:** Risk of significant settlement.")
+                    st.write("- **Stability:** Ground improvement is likely required.")
                 elif worst_n < 30:
-                    st.write("**Observations:** Medium dense soil profile. Liquefaction may be triggered depending on peak ground acceleration.")
-                    st.write("- **Action:** Detailed laboratory testing is advised.")
+                    st.write("**Observations:** Medium dense soil. Liquefaction potential is moderate.")
+                    st.write("- **Action:** Site-specific seismic analysis recommended.")
                 else:
-                    st.write("**Observations:** Competent soil profile with high stiffness.")
+                    st.write("**Observations:** Dense soil profile. Generally safe from liquefaction.")
 
             # --- DEPTH-BASED LIST ---
             st.subheader("Depth-Based Characterization")
@@ -72,9 +72,9 @@ if uploaded_file is not None:
                     </div>
                 """, unsafe_allow_html=True)
         else:
-            st.error("Column mismatch! Please ensure your file contains 'Depth' and 'SPT_N'.")
+            st.error("Column mismatch! Ensure file contains 'Depth' and 'SPT_N'.")
 
     except Exception as e:
-        st.error(f"An unexpected error occurred: {e}")
+        st.error(f"Error: {e}")
 else:
-    st.info("Awaiting data upload for automated soil characterization.")
+    st.info("Awaiting data upload...")
